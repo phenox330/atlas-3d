@@ -148,8 +148,9 @@ const STEPS = [
   { action: "fetch", label: "Données", done: s => s.status.fetched },
   { action: "build", label: "Construire 3D", done: s => s.status.built },
   { action: "blender", label: "Blender", done: s => s.status.blender },
-  { action: "unreal", label: "Paquet Unreal", done: s => s.status.unreal },
+  { action: "facades", label: "Façades (photos)", done: s => s.status.facades },
   { action: "hq", label: "Rendu HQ", done: s => s.status.hq },
+  { action: "unreal", label: "Paquet Unreal", done: s => s.status.unreal },
   { action: "ue-render", label: "Rendu Unreal", done: s => (s.status.renders || []).some(f => f.startsWith("unreal_")) },
 ];
 function fillSectorSelects() {

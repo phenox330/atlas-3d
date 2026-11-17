@@ -7,7 +7,7 @@ from pathlib import Path
 import bpy
 
 out = Path(sys.argv[sys.argv.index("--") + 1]); out.mkdir(parents=True, exist_ok=True)
-keep = {"terrain", "batiments", "eau"}
+keep = {"terrain", "batiments", "eau", "bordures"}
 bpy.ops.object.select_all(action="DESELECT")
 for o in bpy.data.objects:
     if o.type == "MESH" and (o.name in keep or o.name.startswith(("Jetée", "jetee", "pieu"))):

@@ -94,6 +94,7 @@ function sectorStatus(dir: string) {
   const rd = join(b, "hq", "renders");
   return {
     hq: existsSync(join(b, "hq", "arcachon_hq.blend")),
+    facades: existsSync(join(b, "hq", "facades.json")),
     renders: existsSync(rd) ? readdirSync(rd).filter(f => f.endsWith(".png")).sort() : [],
     fetched: existsSync(join(raw, "mnt.npy")),
     built: existsSync(join(b, "sector.glb")),
@@ -281,6 +282,12 @@ app.post("/api/projects/:p/sectors/:s/run", async c => {
       job = runJob({ project: p, sector: s, action, label: `Rendu haute qualité (Cycles) — ${name}`,
         cmd: "bash", args: ["-c", `uv run hq_prepare.py "${sd}" && "${BLENDER}" -b -P blender_hq.py -- "${sd}" --samples=320 --res=2560x1440`], cwd: PIPELINE,
         parse: l => (/^(\[|\[hq|@@|ATLAS|Error|Traceback|  File|\w+Error)/.test(l) ? l : null) });
+      break;
+    case "facades":
+      if (!existsSync(join(sd, "raw", "batiments.geojson"))) return c.json({ error: "télécharge les données d'abord" }, 400);
+      job = runJob({ project: p, sector: s, action, label: `Façades depuis les photos de rue (Panoramax + vision) — ${name}`,
+        cmd: "bash", args: ["-c", `uv run python -c "import sys;sys.path.insert(0,'.');from atlas import Sector,fetch_panoramax;from pathlib import Path;fetch_panoramax(Sector(Path(sys.argv[1])))" "${sd}" && uv run facades.py "${sd}" --max 250 --workers 6`], cwd: PIPELINE,
+        parse: l => (/^(\[|@@|Error|Traceback|  File|\w+Error)/.test(l) ? l : null) });
       break;
     case "open-blender":
       spawn("open", ["-a", "Blender", join(sd, "build", "sector.blend")], { detached: true });

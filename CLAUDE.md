@@ -8,7 +8,10 @@ données ouvertes (IGN LiDAR HD, BD TOPO, ortho, OSM, Panoramax) → Blender →
 - `server/workflow.ts` : étapes du workflow + secteurs prédéfinis (coordonnées approximatives).
 - `web/` : interface (vanilla JS, Leaflet, three.js servis depuis node_modules).
 - `pipeline/` : projet uv (Python 3.14). `atlas.py fetch|build|all <secteur>`, `blender_sector.py`, `unreal_export.py`.
-  Haute qualité : `hq_prepare.py` (toits 2/4 pans, façades, arbres LiDAR MNH, masques de sol OSM, jetées, mobilier)
+  Façades : `facades.py` (photos Panoramax → rayons vers les bâtiments → Claude vision via `claude -p` → build/hq/facades.json, cache raw/facades/).
+  Haute qualité : `hq_prepare.py` (toits relevés sur la surface LiDAR + pans RANSAC, repli procédural si pas d'écho → qa_lidar.json ;
+  façades photo > BD TOPO > hasard, vecteur `fa` par face ; arbres LiDAR MNH, arbustes LiDAR ; marquages, passages piétons,
+  bordures, mobilier réel OSM ; masques de sol)
   → `blender_hq.py` (scène Cycles + 5 plans dans SHOTS, options --samples --res --shots --view --exposure)
   → `export_ue.py` (Blender → glb monde + pieux fusionnés + teinte/graine en COLOR_0, instances.json)
   → `ue_project.py` (projet Unreal 5.8 depuis `pipeline/unreal_template/` : atlas_build, atlas_materials, atlas_render)

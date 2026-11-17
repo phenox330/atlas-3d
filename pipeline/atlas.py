@@ -188,6 +188,8 @@ def fetch_osm(sec: Sector):
       way["highway"]({b}); way["natural"]({b}); way["landuse"]({b}); way["leisure"]({b});
       way["waterway"]({b}); way["man_made"]({b}); way["railway"]({b}); way["amenity"]({b});
       node["natural"="tree"]({b}); node["amenity"]({b}); node["shop"]({b});
+      node["highway"]({b}); node["traffic_sign"]({b}); node["barrier"]({b}); node["man_made"]({b});
+      node["leisure"]({b}); node["tourism"]({b});
       relation["natural"="water"]({b});
     );out body geom;"""
     last = None
@@ -206,22 +208,32 @@ def fetch_osm(sec: Sector):
     raise RuntimeError(f"Overpass indisponible ({last})")
 
 
-def fetch_panoramax(sec: Sector):
+def fetch_panoramax(sec: Sector, grid: int = 4, per_cell: int = 500):
+    """Photos de rue Panoramax. L'API plafonne une recherche à ~500 résultats : on découpe la
+    zone en grid × grid cellules pour couvrir toutes les rues, puis on dédoublonne."""
     lo0, la0, lo1, la1 = sec.bbox_wgs
-    items, url, params = [], PANORAMAX, {"bbox": f"{lo0},{la0},{lo1},{la1}", "limit": 500}
-    while url and len(items) < 2000:
-        d = get(url, params).json()
-        for f in d.get("features", []):
-            a = f.get("assets", {})
-            items.append({
-                "id": f["id"], "lon": f["geometry"]["coordinates"][0], "lat": f["geometry"]["coordinates"][1],
-                "date": f["properties"].get("datetime"),
-                "heading": f["properties"].get("view:azimuth"),
-                "thumb": a.get("thumb", {}).get("href"), "sd": a.get("sd", {}).get("href"),
-                "hd": a.get("hd", {}).get("href"),
-            })
-        nxt = [l for l in d.get("links", []) if l.get("rel") == "next"]
-        url, params = (nxt[0]["href"], None) if nxt else (None, None)
+    seen, items = set(), []
+    for iy in range(grid):
+        for ix in range(grid):
+            a0, a1 = lo0 + (lo1 - lo0) * ix / grid, lo0 + (lo1 - lo0) * (ix + 1) / grid
+            b0, b1 = la0 + (la1 - la0) * iy / grid, la0 + (la1 - la0) * (iy + 1) / grid
+            try:
+                d = get(PANORAMAX, {"bbox": f"{a0},{b0},{a1},{b1}", "limit": per_cell}).json()
+            except Exception as e:
+                log(f"  Panoramax cellule {ix},{iy} ignorée : {e}")
+                continue
+            for f in d.get("features", []):
+                if f["id"] in seen:
+                    continue
+                seen.add(f["id"])
+                a = f.get("assets", {})
+                items.append({
+                    "id": f["id"], "lon": f["geometry"]["coordinates"][0], "lat": f["geometry"]["coordinates"][1],
+                    "date": f["properties"].get("datetime"),
+                    "heading": f["properties"].get("view:azimuth"),
+                    "thumb": a.get("thumb", {}).get("href"), "sd": a.get("sd", {}).get("href"),
+                    "hd": a.get("hd", {}).get("href"),
+                })
     (sec.raw / "panoramax.json").write_text(json.dumps(items))
     log(f"  Panoramax : {len(items)} photos de rue")
     return f"{len(items)} photos"

@@ -14,7 +14,9 @@ KIT = {
     "hdris": ["belfast_sunset_puresky", "kloppenheim_06_puresky", "venice_sunset"],
     "textures": ["clay_roof_tiles_02", "roof_slates_02", "painted_plaster_wall", "grey_plaster", "brick_4",
                  "asphalt_02", "coast_sand_01", "leafy_grass", "patterned_paving", "gravel_concrete"],
-    "models": ["pine_tree_01", "island_tree_01", "street_lamp_01", "painted_wooden_bench"],
+    "models": ["pine_tree_01", "island_tree_01", "street_lamp_01", "painted_wooden_bench",
+               "street_lamp_02", "metal_trash_can", "outdoor_table_chair_set_01", "water_manhole_cover",
+               "ship_pinnace", "shrub_01", "shrub_02", "shrub_03", "planter_box_01", "fire_hydrant", "tree_small_02"],
 }
 TEX_MAPS = {"diff": ("Diffuse", "diff"), "nor": ("nor_gl", "nor_gl"), "rough": ("Rough", "rough"), "disp": ("Displacement", "disp")}
 

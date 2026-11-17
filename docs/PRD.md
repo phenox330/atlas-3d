@@ -1,6 +1,6 @@
 # Atlas — PRD
 
-> Document vivant. Dernière mise à jour : 17/11/2026.
+> Document vivant. Dernière mise à jour : 17/11/2026 (passe « réalisme » sur arcachon-centre-ville).
 > Sources : `CLAUDE.md` (architecture), `server/workflow.ts` (étapes détaillées et prompts),
 > `docs/recherche/` (état de l'art), `docs/ressources/` (retours d'expérience externes).
 
@@ -48,25 +48,33 @@ commun aux trois options : données → bâti → rendu.
 - Génération de la ville par un *world model* (voir `docs/recherche/`).
 - Moteur maison (Rust, etc.) : Unreal reste la cible tant que la scène grossit (voir 7).
 
-## 5. État au 13/11/2026
+## 5. État au 17/11/2026
+
+Priorité actuelle : **rendre le secteur `arcachon-centre-ville` réaliste avant d'étendre la zone.**
+Rendus avant/après : `build/hq/renders/avant_2026-11-17/` contre `build/hq/renders/` (hors git).
 
 ### 5.1 Ce qui marche
 - **3 secteurs** : `jetee-thiers` (500 m), `arcachon-centre-ville` (1 km²), `arcachon-ville-d-hiver`.
-- **Données** : MNT LiDAR HD, ortho, BD TOPO, OSM (3 miroirs Overpass en repli).
-- **Blockout** : terrain texturé par l'ortho, bâti extrudé à hauteur réelle.
-- **Bâti V1** : typologies villa 4 pans / 2 pans / immeuble / annexe / léger, toits tuile ou ardoise, façades procédurales (fenêtres, volets colorés, vitrines).
-- **Végétation** : 5 211 arbres réels placés depuis la canopée LiDAR (MNH), modèles Poly Haven.
-- **Jetées** Thiers et Legallais (OSM `man_made=pier`) avec pieux.
-- **Rendu HQ Blender** : Cycles, 5 plans 2560×1440, coucher de soleil (HDRI + soleil aligné).
-- **Rendu Unreal 5.8.4** : projet généré, Movie Render Queue, Lumen, éditeur masqué, 5 plans ≈ 1 min chacun.
+- **Données** : MNT et MNH LiDAR HD, ortho 20 cm, BD TOPO, OSM (avec passages piétons, feux, stops, panneaux, bornes), Panoramax découpé en 4×4 cellules (2 428 photos au lieu de 500).
+- **Toits relevés au LiDAR** (17/11) : la surface LiDAR est triangulée dans chaque emprise, découpée en pans plans (RANSAC), bornée entre égout et faîtage. Les murs montent jusqu'aux pans. Les terrasses sont détectées et posées à plat avec acrotère. Résultat sur le secteur : 1 546 bâtiments, dont 563 en toit plat.
+- **Couleur réelle des toits** (17/11) : l'orthophoto vue d'avion × le grain des tuiles et ardoises.
+- **Façades lues sur photo** (17/11, `facades.py`) : 239 bâtiments décrits par vision sur 250 photos. Pour chacun : couleur d'enduit, étages, volets (battants, roulants, aucun) et leur couleur, chaînages brique, lambrequins, vitrine au RDC. Sans photo, on se rabat sur la BD TOPO (matériaux des murs et du toit, nombre d'étages), puis sur le hasard.
+- **Shader de façade** : hauteur d'étage réelle, volets roulants, harpes et encadrements en brique, vitrines connues.
+- **Lambrequins** : frise de bois découpé (festons + jours) sous les rives.
+- **Rue** : 675 tirets axiaux, 198 passages piétons, 36 lignes d'arrêt, bordures granit, trottoir continu jusqu'aux façades (couleur relevée sur les photos), plaques d'égout.
+- **Mobilier réel OSM** : bancs, poubelles, terrasses devant les restaurants, lampadaires ; 2 500 arbustes placés depuis la végétation basse du LiDAR.
+- **Sable mouillé** sur 1 m au-dessus du niveau de l'eau.
+- **QA LiDAR** : `build/hq/qa_lidar.json` liste les emprises sans écho (15 sur le secteur).
+- **Rendus** : Blender Cycles (5 plans) et Unreal 5.8.4 (Lumen).
 
 ### 5.2 Limites connues
-- Décor hors secteur flou (contexte 16 m, ortho 3 m).
-- Façades génériques : pas de lambrequins, bow-windows ni balcons.
-- Arbres Poly Haven génériques (pas de vrai pin maritime).
-- Bathymétrie absente : plan d'eau plat à 0 m NGF.
-- Pas d'IA photo → 3D locale (TRELLIS.2 exige un GPU NVIDIA 24 Go).
-- Port d'Arcachon hors secteur.
+- **Unreal pas encore à parité** : il reçoit la nouvelle géométrie (toits relevés, bordures), mais pas encore les données de façade (volets, chaînages), les lambrequins, ni la couleur orthophoto des toits.
+- Sur certains pans raides, l'orthophoto « coule » (façades vues en biais sur la photo d'avion).
+- Fenêtres encore en grille régulière : la vision compte les étages, pas encore la position de chaque baie. Pas de balcons en relief.
+- Pas de véhicules ni de pinasses : aucun modèle CC0 fidèle (le « ship_pinnace » de Poly Haven est un galion). Il faut passer par l'image→3D (jalon C).
+- Arbres d'alignement : modèle Poly Haven générique (pas de platane ni de pin maritime fidèle).
+- Bathymétrie absente : plan d'eau plat.
+- Nuage de points LiDAR classé (sol / bâtiment / végétation) non branché : le service WFS IGN utilisé ne l'expose pas. On travaille sur le MNH, donc un arbre au-dessus d'un toit peut le bosseler.
 - Pas encore de personnage jouable : l'échelle à hauteur d'homme n'est pas validée.
 
 ### 5.3 Niveaux de détail et budget
@@ -85,15 +93,18 @@ Les étapes détaillées, avec leurs prompts, sont dans `server/workflow.ts`. Or
 
 ### Jalon A : Fondations (en cours)
 - [x] Données, blockout, rendu Blender, rendu Unreal
+- [x] Passe QA LiDAR : emprises sans écho détectées et renvoyées au procédural (`qa_lidar.json`)
+- [x] Marquages, passages piétons, bordures, trottoirs continus
+- [ ] **Parité Unreal** : données de façade (UV2/UV3), lambrequins, couleur orthophoto des toits
 - [ ] **Valider l'échelle** : un Third Person Character qui marche dans `arcachon-centre-ville`
-- [ ] Passe QA LiDAR : détecter les trous et les sur-élévations aberrantes, puis les corriger (voir ressources)
-- [ ] Routes et trottoirs réels (`blender_roads.py`)
 
 ### Jalon B : Le Bassin crédible
 - [ ] Bathymétrie (SHOM, licence à vérifier) + estran LiDAR + niveau de marée paramétrable
-- [ ] Toits depuis le **nuage de points LiDAR HD classé** (forme réelle des toits), plus seulement depuis les rasters
-- [ ] Générateur de villas arcachonnaises V2 : lambrequins, bow-windows, balcons, maisons ostréicoles
-- [ ] Façades fidèles sur le front de mer, à partir de Panoramax
+- [x] Toits relevés depuis la surface LiDAR (pans plans RANSAC) + couleur orthophoto
+- [ ] Nuage de points LiDAR HD **classé** pour retirer les arbres au-dessus des toits
+- [x] Façades lues sur les photos Panoramax (vision), avec repli BD TOPO
+- [ ] Façades V2 : position réelle des baies, balcons en relief, bow-windows
+- [ ] Étendre la lecture des façades aux bâtiments sans photo proche (photos HD, angles latéraux)
 - [ ] Vrais pins maritimes, oyats, dunes
 - [ ] Port d'Arcachon, pinasses à quai
 

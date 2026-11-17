@@ -120,6 +120,11 @@ class NT:
         self.link(u.outputs[0], sep.inputs[0])
         return u.outputs[0], sep.outputs[0], sep.outputs[1]
 
+    def n_sep_sum(self, color):
+        sep = self.n("ShaderNodeSeparateColor")
+        self.link(color, sep.inputs[0])
+        return self.math("ADD", self.math("ADD", sep.outputs[0], sep.outputs[1]), sep.outputs[2])
+
     def bsdf(self):
         b = self.n("ShaderNodeBsdfPrincipled")
         out = self.n("ShaderNodeOutputMaterial")
@@ -223,16 +228,37 @@ def mat_ground():
     dark = lambda x, k: t.mix(1.0 - k, (0.0, 0.0, 0.0), x)
     asphalt_tinted = t.mix(0.2, dark(col["asphalt"], 0.5), c)
     c = t.mix(road, c, asphalt_tinted)
-    c = t.mix(walk, c, dark(t.mix(0.4, col["walk"], c), 0.6))
+    ss = json.loads((HQ / "street_style.json").read_text()) if (HQ / "street_style.json").exists() else {}
+    walk_rgb = (0.45, 0.30, 0.26)
+    cols_ = [c_ for c_ in ss.get("sidewalk_colors", []) if c_]
+    if cols_:
+        arr = np.array([[int(h.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)] for h in cols_])
+        walk_rgb = tuple(float(x) for x in np.median(arr, 0))
+    walk_tex = t.n("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY", clamp_factor=True)
+    sock(walk_tex, "Factor_Float").default_value = 1.0
+    t.link(col["walk"], sock(walk_tex, "A_Color")); sock(walk_tex, "B_Color").default_value = (*[min(1, x * 1.6) for x in walk_rgb], 1)
+    c = t.mix(walk, c, dark(t.mix(0.12, sock(walk_tex, "Result_Color", out=True), c), 0.8))
     warm = t.n("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY", clamp_factor=True)
     sock(warm, "Factor_Float").default_value = 1.0
     t.link(t.mix(0.5, col["sand"], c), sock(warm, "A_Color"))
     sock(warm, "B_Color").default_value = (0.82, 0.70, 0.55, 1)
     c = t.mix(sand, c, sock(warm, "Result_Color", out=True))
     c = t.mix(t.math("MULTIPLY", grass, 0.7), c, t.mix(0.4, col["grass"], c))
+    # sable mouillé : bande de 1 m au-dessus du niveau de l'eau (plus sombre, brillant)
+    sep = t.n("ShaderNodeSeparateXYZ"); t.link(obj, sep.inputs[0])
+    zrel = t.math("SUBTRACT", sep.outputs[2], WATER)
+    wet = t.math("MULTIPLY", sand, t.math("SUBTRACT", 1.0, t.math("DIVIDE", t.math("MAXIMUM", zrel, 0.0), 1.1), clamp=True))
+    c = t.mix(t.math("MULTIPLY", wet, 0.55), c, (0.22, 0.17, 0.12))
+    # marquages au sol (peinture blanche, un peu usée)
+    mark = sb.outputs[2]
+    wear = t.n("ShaderNodeTexNoise"); t.link(obj, wear.inputs["Vector"]); wear.inputs["Scale"].default_value = 2.5
+    mark = t.math("MULTIPLY", mark, t.math("ADD", 0.55, t.math("MULTIPLY", wear.outputs["Fac"], 0.5)), clamp=True)
+    c = t.mix(mark, c, (0.82, 0.82, 0.80))
     t.set_in(b, "Base Color", c)
     r = t.mixf(road, 0.92, rough["asphalt"] or 0.8)
     r = t.mixf(sand, r, 0.95)
+    r = t.mixf(wet, r, 0.22)
+    r = t.mixf(mark, r, 0.6)
     t.set_in(b, "Roughness", r)
     # relief fin
     h = t.math("MULTIPLY", height["asphalt"], road)
@@ -269,13 +295,20 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     _, seglen, walltop = t.uv("UV1")
     tint = t.attr("tint").outputs["Color"]
     seed = t.attr("seed").outputs["Fac"]
+    # données de façade (photo Panoramax / BD TOPO), cf. hq_prepare.FA_DEFAULT
+    fl_h = t.attr("fa_floor").outputs["Fac"]
+    shop_a = t.attr("fa_shop").outputs["Fac"]
+    shm = t.attr("fa_shut").outputs["Fac"]
+    shut_c = t.attr("fa_shut_col").outputs["Color"]
+    trim_on = t.attr("fa_trim").outputs["Fac"]
+    trim_c = t.attr("fa_trim_col").outputs["Color"]
     ts = tex_set(texname)
     vec = t.scaled(uv0, tex_scale)
     base = t.img(ts["diff"], vec).outputs[0]
     if use_tint:
         # enduit : on garde le grain de la texture, la couleur vient de la teinte du bâtiment
         bw = t.n("ShaderNodeRGBToBW"); t.link(base, bw.inputs[0])
-        g = t.math("ADD", t.math("MULTIPLY", bw.outputs[0], 0.45), 0.42)
+        g = t.math("ADD", t.math("MULTIPLY", bw.outputs[0], 0.35), 0.66)  # grain sans éteindre la couleur relevée
         mulc = t.n("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY", clamp_factor=True)
         sock(mulc, "Factor_Float").default_value = 1.0
         comb = t.n("ShaderNodeCombineColor")
@@ -289,7 +322,8 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     dirt = t.math("ADD", dirt, t.math("MULTIPLY", noise.outputs["Fac"], 0.12))
     base = t.mix(dirt, base, (0.18, 0.16, 0.14))
     # ---- fenêtres procédurales
-    S, WW, F, SILL, WH = 2.9, 1.15, 3.0, 0.95, 1.55
+    S, WW, SILL, WH = 2.9, 1.15, 0.95, 1.55
+    F = t.mixf(t.math("GREATER_THAN", fl_h, 0.5), 3.0, fl_h)  # hauteur d'étage réelle si connue
     nw = t.math("FLOOR", t.math("DIVIDE", seglen, S))
     span = t.math("MULTIPLY", nw, S)
     xm = t.math("ADD", u, t.math("MULTIPLY", span, 0.5))
@@ -305,7 +339,10 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     win = t.math("MULTIPLY", zone, t.math("LESS_THAN", acol, WW / 2))
     # rez-de-chaussée commercial (immeubles > 9 m, ~65 %) : grandes vitrines
     shop = t.math("MULTIPLY", t.math("LESS_THAN", v, 3.0), t.math("GREATER_THAN", walltop, 9.0))
-    shop = t.math("MULTIPLY", shop, t.math("GREATER_THAN", t.math("FRACT", t.math("MULTIPLY", seed, 3.7)), 0.35))
+    shop_rand = t.math("GREATER_THAN", t.math("FRACT", t.math("MULTIPLY", seed, 3.7)), 0.35)
+    known = t.math("GREATER_THAN", shop_a, -0.5)
+    shop = t.math("MULTIPLY", t.math("LESS_THAN", v, 3.0), t.mixf(known, t.math("GREATER_THAN", walltop, 9.0), 1.0))
+    shop = t.math("MULTIPLY", shop, t.mixf(known, shop_rand, shop_a))
     shop = t.math("MULTIPLY", shop, t.math("MULTIPLY", in_span, has))
     shop_win = t.math("MULTIPLY", shop, t.math("LESS_THAN", acol, S / 2 - 0.3))
     shop_win = t.math("MULTIPLY", shop_win, t.math("MULTIPLY", t.math("GREATER_THAN", v, 0.25), t.math("LESS_THAN", v, 2.7)))
@@ -321,7 +358,12 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     # volets (villas surtout)
     shut = t.math("MULTIPLY", t.math("GREATER_THAN", acol, WW / 2 + 0.03), t.math("LESS_THAN", acol, WW / 2 + 0.03 + WW / 2))
     shut = t.math("MULTIPLY", shut, zone)
-    shut = t.math("MULTIPLY", shut, t.math("GREATER_THAN", seed, 0.3 if shutters else 2.0))
+    # volets : -1 hasard (ancien comportement), 0 aucun, 1 battants, 2 roulants (pas de volets latéraux)
+    rand_on = t.math("GREATER_THAN", seed, 0.3 if shutters else 2.0)
+    shut_known = t.math("GREATER_THAN", shm, -0.5)
+    side_on = t.mixf(shut_known, rand_on, t.math("COMPARE", shm, 1.0))
+    shut = t.math("MULTIPLY", shut, side_on)
+    roll = t.math("MULTIPLY", t.math("COMPARE", shm, 2.0), zone)
     ramp = t.n("ShaderNodeValToRGB")
     ramp.color_ramp.interpolation = "CONSTANT"
     pal = [(0.08, 0.18, 0.34), (0.30, 0.40, 0.30), (0.32, 0.07, 0.09), (0.88, 0.88, 0.85), (0.38, 0.46, 0.52), (0.10, 0.36, 0.38)]
@@ -334,8 +376,23 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     t.link(t.math("FRACT", t.math("MULTIPLY", seed, 7.31)), ramp.inputs[0])
     # lames de volet
     slats = t.math("GREATER_THAN", t.math("FRACT", t.math("MULTIPLY", vf, 9.0)), 0.18)
-    shut_col = t.mix(t.math("MULTIPLY", t.math("SUBTRACT", 1.0, slats), 0.5), ramp.outputs[0], (0.02, 0.02, 0.02))
-    c = t.mix(shut, base, shut_col)
+    has_col = t.math("GREATER_THAN", t.math("ADD", t.n_sep_sum(shut_c), 0.0), 0.02)
+    pal_col = t.mix(t.math("MULTIPLY", shut_known, has_col), ramp.outputs[0], shut_c)
+    shut_col = t.mix(t.math("MULTIPLY", t.math("SUBTRACT", 1.0, slats), 0.5), pal_col, (0.02, 0.02, 0.02))
+    # chaînages brique : harpes d'angle (alternance 55/35 cm) + encadrements de baies
+    harp_w = t.mixf(t.math("LESS_THAN", t.math("FRACT", t.math("DIVIDE", v, 0.5)), 0.5), 0.35, 0.55)
+    corner = t.math("GREATER_THAN", t.math("ABSOLUTE", u), t.math("SUBTRACT", t.math("MULTIPLY", seglen, 0.5), harp_w))
+    corner = t.math("MULTIPLY", corner, t.math("LESS_THAN", v, t.math("SUBTRACT", walltop, 0.05)))
+    ring_x = t.math("MULTIPLY", t.math("LESS_THAN", acol, WW / 2 + 0.2), t.math("GREATER_THAN", t.math("ADD", vf, 0.0), SILL - 0.2))
+    ring_y = t.math("LESS_THAN", vf, SILL + WH + 0.25)
+    surround = t.math("MULTIPLY", t.math("MULTIPLY", ring_x, ring_y), t.math("MULTIPLY", in_span, has))
+    surround = t.math("MULTIPLY", surround, t.math("MULTIPLY", t.math("GREATER_THAN", v, 0.5), t.math("LESS_THAN", v, t.math("SUBTRACT", walltop, 0.6))))
+    surround = t.math("MULTIPLY", surround, t.math("SUBTRACT", 1.0, shop))
+    trim = t.math("MULTIPLY", trim_on, t.math("MAXIMUM", corner, t.math("SUBTRACT", surround, win)), clamp=True)
+    mortar = t.math("GREATER_THAN", t.math("FRACT", t.math("DIVIDE", v, 0.075)), 0.14)
+    brick_c = t.mix(mortar, (0.78, 0.76, 0.72), trim_c)
+    c = t.mix(trim, base, brick_c)
+    c = t.mix(shut, c, shut_col)
     c = t.mix(frame, c, (0.86, 0.85, 0.82))
     # vitrage : sombre et réfléchissant ; quelques pièces éclairées
     wn = t.n("ShaderNodeTexWhiteNoise", noise_dimensions="3D")
@@ -347,6 +404,9 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     lit = t.math("MULTIPLY", glass, t.math("GREATER_THAN", sock(wn, "Value", out=True), 0.86))
     lit = t.math("MAXIMUM", lit, t.math("MULTIPLY", shop_glass, t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("DIVIDE", v, 3.0)), 0.25)))
     glass_col = t.mix(t.math("MULTIPLY", sock(wn, "Value", out=True), 0.4), (0.015, 0.02, 0.025), (0.05, 0.05, 0.045))
+    roll_band = t.math("MULTIPLY", t.math("MULTIPLY", roll, glass), t.math("GREATER_THAN", vf, SILL + WH * 0.55))
+    roll_col = t.mix(t.math("MULTIPLY", t.math("GREATER_THAN", t.math("FRACT", t.math("MULTIPLY", vf, 22.0)), 0.25), 0.6), (0.18, 0.18, 0.19), (0.30, 0.30, 0.31))
+    glass_col = t.mix(roll_band, glass_col, roll_col)
     c = t.mix(glass, c, glass_col)
     t.set_in(b, "Base Color", c)
     rough = t.mixf(glass, 0.85, 0.04)
@@ -369,7 +429,7 @@ def mat_wall(name, texname, use_tint, tex_scale, shutters=True):
     return m
 
 
-def mat_roof(name, texname, scale, var=0.12, tint=None):
+def mat_roof(name, texname, scale, var=0.12, tint=None, ortho=0.55):
     m = bpy.data.materials.new(name)
     t = NT(m)
     b, _ = t.bsdf()
@@ -386,6 +446,23 @@ def mat_roof(name, texname, scale, var=0.12, tint=None):
     c = hsv.outputs[0]
     if tint:
         c = t.mix(0.6, c, tint)
+    if ortho:
+        # couleur réelle du toit vue d'avion (orthophoto IGN 20 cm) × grain de la texture (tuiles, ardoises)
+        tc = t.n("ShaderNodeTexCoord")
+        sep = t.n("ShaderNodeSeparateXYZ"); t.link(tc.outputs["Object"], sep.inputs[0])
+        cmb = t.n("ShaderNodeCombineXYZ")
+        t.link(t.math("DIVIDE", sep.outputs[0], SIZE), cmb.inputs[0])
+        t.link(t.math("DIVIDE", sep.outputs[1], SIZE), cmb.inputs[1])
+        oc = t.img(RAW / "ortho.jpg", cmb.outputs[0]).outputs[0]
+        bw = t.n("ShaderNodeRGBToBW"); t.link(c, bw.inputs[0])
+        grain = t.math("MINIMUM", t.math("MAXIMUM", t.math("DIVIDE", bw.outputs[0], 0.42), 0.55), 1.5)
+        gcol = t.n("ShaderNodeCombineColor")
+        for i in range(3):
+            t.link(grain, gcol.inputs[i])
+        mul = t.n("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY", clamp_factor=True)
+        sock(mul, "Factor_Float").default_value = 1.0
+        t.link(oc, sock(mul, "A_Color")); t.link(gcol.outputs[0], sock(mul, "B_Color"))
+        c = t.mix(ortho, c, sock(mul, "Result_Color", out=True))
     t.set_in(b, "Base Color", c)
     if ts["rough"]:
         t.set_in(b, "Roughness", t.img(ts["rough"], vec, "Non-Color").outputs[0])
@@ -393,6 +470,27 @@ def mat_roof(name, texname, scale, var=0.12, tint=None):
         nm = t.n("ShaderNodeNormalMap"); nm.inputs["Strength"].default_value = 1.2
         t.link(t.img(ts["nor"], vec, "Non-Color").outputs[0], nm.inputs["Color"])
         t.set_in(b, "Normal", nm.outputs[0])
+    return m
+
+
+def mat_lambrequin():
+    """Frise de bois découpé sous les rives (signature des villas arcachonnaises) : festons + jours ronds."""
+    m = bpy.data.materials.new("lambrequin")
+    t = NT(m)
+    b, out = t.bsdf()
+    uv0, u, v = t.uv("UV0")
+    P_ = 0.22
+    x = t.math("SUBTRACT", t.math("FRACT", t.math("DIVIDE", u, P_)), 0.5)
+    arc = t.math("SQRT", t.math("MAXIMUM", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", t.math("MULTIPLY", x, x), 4.0)), 0.0))
+    edge = t.math("ADD", 0.04, t.math("MULTIPLY", t.math("SUBTRACT", 1.0, arc), 0.12))  # bas festonné
+    solid = t.math("GREATER_THAN", v, edge)
+    hx = t.math("MULTIPLY", x, P_)
+    hy = t.math("SUBTRACT", v, 0.2)
+    hole = t.math("LESS_THAN", t.math("ADD", t.math("MULTIPLY", hx, hx), t.math("MULTIPLY", hy, hy)), 0.0016)
+    alpha = t.math("MULTIPLY", solid, t.math("SUBTRACT", 1.0, hole))
+    t.set_in(b, "Base Color", (0.93, 0.91, 0.86))
+    t.set_in(b, "Roughness", 0.6)
+    t.set_in(b, "Alpha", alpha)
     return m
 
 
@@ -598,12 +696,42 @@ def build_scene():
         "toit_ardoise": mat_roof("toit_ardoise", "roof_slates_02", 1 / 2.0),
         "toit_plat": mat_roof("toit_plat", "gravel_concrete", 1 / 3.0, var=0.05, tint=(0.28, 0.28, 0.27)),
         "mur_leger": mat_simple("mur_leger", (0.62, 0.62, 0.6), 0.5, 0.3),
+        "lambrequin": mat_lambrequin(),
     }
     v, f = d["v"], d["f"]
     uv0 = d["uv0"]
     uv1 = d["uv1"]
+    fa = d["fa"] if "fa" in d.files else np.tile(np.array([0, -1, -1, 0, 0, 0, 0, .55, .24, .17], np.float32), (len(f), 1))
     make_mesh("batiments", v, f, uvs={"UV0": uv0, "UV1": uv1}, mats=[mats[n] for n in names], mat_index=d["mat"],
-              face_attrs={"tint": ("FLOAT_COLOR", d["col"]), "seed": ("FLOAT", d["seed"])})
+              face_attrs={"tint": ("FLOAT_COLOR", d["col"]), "seed": ("FLOAT", d["seed"]),
+                          "fa_floor": ("FLOAT", fa[:, 0]), "fa_shop": ("FLOAT", fa[:, 1]), "fa_shut": ("FLOAT", fa[:, 2]),
+                          "fa_shut_col": ("FLOAT_COLOR", fa[:, 3:6]), "fa_trim": ("FLOAT", fa[:, 6]),
+                          "fa_trim_col": ("FLOAT_COLOR", fa[:, 7:10])})
+    # -- bordures de trottoir (granit, 15 cm)
+    curbs = json.loads((HQ / "curbs.json").read_text()) if (HQ / "curbs.json").exists() else []
+    cv, cf = [], []
+    for line in curbs:
+        P = np.array(line, np.float32)
+        for i in range(len(P) - 1):
+            a, b = P[i], P[i + 1]
+            dxy = b[:2] - a[:2]
+            L = float(np.linalg.norm(dxy))
+            if L < 0.05:
+                continue
+            nrm = np.array([-dxy[1], dxy[0]]) / L * 0.1
+            k = len(cv)
+            for q, z in ((a, a[2]), (b, b[2])):
+                for o in (-1, 1):
+                    cv.append([q[0] + nrm[0] * o, q[1] + nrm[1] * o, z - 0.05])
+                    cv.append([q[0] + nrm[0] * o, q[1] + nrm[1] * o, z + 0.14])
+            # sommets : a(-1,bas)0 a(-1,haut)1 a(+1,bas)2 a(+1,haut)3 b… 4..7
+            cf += [[k + 1, k + 5, k + 7], [k + 1, k + 7, k + 3],  # dessus
+                   [k + 0, k + 4, k + 5], [k + 0, k + 5, k + 1],  # côté -
+                   [k + 2, k + 3, k + 7], [k + 2, k + 7, k + 6]]  # côté +
+    if cv:
+        co = make_mesh("bordures", cv, cf)
+        co.data.materials.append(mat_simple("granit", (0.30, 0.29, 0.28), 0.8))
+        log(f"Bordures : {len(cf)} triangles")
     log(f"Bâtiments : {len(f)} triangles")
     # -- jetées (Thiers, Legallais) : platelage + pieux
     piers = json.loads((HQ / "piers.json").read_text()) if (HQ / "piers.json").exists() else []
@@ -641,10 +769,23 @@ def build_scene():
     pcol = bpy.data.collections.new("mobilier")
     sc.collection.children.link(pcol)
     cache = {}
-    for i, (model, x, y, z, rz) in enumerate(props):
+    for i, pr in enumerate(props):
+        model, x, y, z, rz = pr[:5]
         if model not in cache:
-            cache[model] = load_model_collection(model)
-        instance(cache[model], f"{model}_{i}", (x, y, z), rz, 1.0, pcol)
+            try:
+                cache[model] = load_model_collection(model)
+            except Exception as e:
+                log(f"  modèle {model} indisponible : {e}")
+                cache[model] = None
+        col = cache[model]
+        if col is None:
+            continue
+        sc_ = 1.0
+        if len(pr) > 5:  # hauteur mesurée (arbustes LiDAR)
+            sc_ = float(np.clip(pr[5] / max(col["height"], 0.1), 0.4, 3.0))
+        if model == "ship_pinnace":  # pinasse ≈ 10 m
+            sc_ = 1.0
+        instance(col, f"{model}_{i}", (x, y, z), rz, sc_, pcol)
     log(f"Mobilier : {len(props)}")
 
 
