@@ -258,7 +258,10 @@ function loadViewer(s) {
   if (current) { scene.remove(current); current = null; }
   if (!s.status.built) { $("#viewerHint").textContent = "Pas encore construit : lance « Données » puis « Construire 3D »."; return; }
   $("#viewerHint").textContent = "Chargement…";
-  new GLTFLoader().load(`/files/${state.project}/${s.slug}/build/sector.glb?t=${s.manifest.built_at}`, g => {
+  // scène HQ (toits LiDAR, façades relevées, arbres) si « Rendu HQ » a tourné, sinon le blockout
+  const url = s.status.viewer ? `/files/${state.project}/${s.slug}/build/hq/viewer.glb?t=${s.status.viewer}`
+                              : `/files/${state.project}/${s.slug}/build/sector.glb?t=${s.manifest.built_at}`;
+  new GLTFLoader().load(url, g => {
     current = g.scene;
     current.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true;
       if (o.material?.transparent) { o.material.depthWrite = false; o.castShadow = false; } } });
@@ -274,7 +277,8 @@ function loadViewer(s) {
     camera.far = size * 20; camera.updateProjectionMatrix();
     scene.fog.near = size * 1.5; scene.fog.far = size * 8;
     resizeViewer();
-    $("#viewerHint").textContent = "Clic gauche : tourner · droit : déplacer · molette : zoom";
+    $("#viewerHint").textContent = (s.status.viewer ? "Scène HQ (aperçu web, sans fenêtres ni textures fines : voir l'onglet Rendus pour le rendu final) · " : "Blockout · ")
+      + "Clic gauche : tourner · droit : déplacer · molette : zoom";
   }, undefined, err => { $("#viewerHint").textContent = "Erreur de chargement : " + err.message; });
 }
 function loadBlender(s) {

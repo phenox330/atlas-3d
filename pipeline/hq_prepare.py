@@ -970,6 +970,84 @@ def build_details(sec: Sector, mnt, footprints, water_level):
         f"{n_shrub} arbustes LiDAR, {boats} pinasses, {len(props)} objets réels")
 
 
+# ------------------------------------------------------------------ version web (vue 3D de l'app)
+def export_viewer(sec: Sector):
+    """build/hq/viewer.glb : la scène HQ lisible par le navigateur (three.js). Les matériaux procéduraux
+    de Blender ne passent pas sur le web : on cuit des couleurs par face (enduit relevé sur photo, couleur
+    réelle des toits prise sur l'orthophoto) et des arbres simplifiés. Repère glTF : (x, z, -y)."""
+    import trimesh
+    hq = sec.out / "hq"
+    d = np.load(hq / "buildings.npz")
+    v, f, mat, col = d["v"], d["f"], d["mat"], d["col"]
+    mats = [str(x) for x in d["mats"]]
+    ortho = np.asarray(Image.open(sec.raw / "ortho.jpg").convert("RGB"), np.float32) / 255
+    H, W = ortho.shape[:2]
+    cen = v[f].mean(axis=1)
+    px = np.clip((cen[:, 0] / sec.size * W).astype(int), 0, W - 1)
+    py = np.clip(((1 - cen[:, 1] / sec.size) * H).astype(int), 0, H - 1)
+    fc = np.zeros((len(f), 4), np.float32)
+    fc[:, 3] = 1
+    is_roof = np.isin(mat, [mats.index(m) for m in ("toit_tuile", "toit_ardoise", "toit_plat")])
+    fc[is_roof, :3] = np.clip(ortho[py[is_roof], px[is_roof]] * 1.1, 0, 1)
+    wall = ~is_roof
+    fc[wall, :3] = np.clip(col[wall] * 0.92, 0, 1)
+    fc[mat == mats.index("mur_brique"), :3] = (0.62, 0.32, 0.24)
+    if "lambrequin" in mats:
+        fc[mat == mats.index("lambrequin"), :3] = (0.93, 0.91, 0.86)
+    to_gl = lambda a: np.column_stack([a[:, 0], a[:, 2], -a[:, 1]])
+    bld = trimesh.Trimesh(vertices=to_gl(v), faces=f, face_colors=(fc * 255).astype(np.uint8), process=False)
+    parts = {"batiments_hq": bld}
+    # arbres simplifiés (pin : fût + cône ; feuillu : fût + boule)
+    trees = json.loads((hq / "trees.json").read_text()) if (hq / "trees.json").exists() else []
+    cone = trimesh.creation.cone(radius=1.0, height=1.0, sections=8)
+    ball = trimesh.creation.icosphere(subdivisions=1, radius=1.0)
+    trunk = trimesh.creation.cylinder(radius=1.0, height=1.0, sections=6)
+    tv, tf, tc = [], [], []
+    n0 = 0
+    for x, y, z, h, sp, _ in trees:
+        pieces = []
+        t = trunk.copy(); t.apply_scale([0.25, 0.25, h * 0.55]); t.apply_translation([x, y, z + h * 0.275]); pieces.append((t, (0.30, 0.22, 0.16)))
+        if sp == "pine":
+            c = ball.copy(); c.apply_scale([h * 0.28, h * 0.28, h * 0.16]); c.apply_translation([x, y, z + h * 0.82]); pieces.append((c, (0.16, 0.26, 0.14)))
+        else:
+            c = ball.copy(); c.apply_scale([h * 0.33, h * 0.33, h * 0.30]); c.apply_translation([x, y, z + h * 0.62]); pieces.append((c, (0.22, 0.34, 0.16)))
+        for m, cc in pieces:
+            tv.append(m.vertices); tf.append(m.faces + n0); tc.append(np.tile([*cc, 1.0], (len(m.faces), 1)))
+            n0 += len(m.vertices)
+    if tv:
+        tm = trimesh.Trimesh(vertices=to_gl(np.vstack(tv)), faces=np.vstack(tf),
+                             face_colors=(np.vstack(tc) * 255).astype(np.uint8), process=False)
+        parts["arbres"] = tm
+    # bordures
+    curbs = json.loads((hq / "curbs.json").read_text()) if (hq / "curbs.json").exists() else []
+    cv, cf = [], []
+    for line in curbs:
+        P = np.array(line, np.float32)
+        for i in range(len(P) - 1):
+            a, b = P[i], P[i + 1]
+            dxy = b[:2] - a[:2]
+            L = float(np.linalg.norm(dxy))
+            if L < 0.05:
+                continue
+            nrm = np.array([-dxy[1], dxy[0]]) / L * 0.12
+            k = len(cv)
+            cv += [[a[0] - nrm[0], a[1] - nrm[1], a[2] + 0.14], [a[0] + nrm[0], a[1] + nrm[1], a[2] + 0.14],
+                   [b[0] + nrm[0], b[1] + nrm[1], b[2] + 0.14], [b[0] - nrm[0], b[1] - nrm[1], b[2] + 0.14]]
+            cf += [[k, k + 1, k + 2], [k, k + 2, k + 3]]
+    if cv:
+        parts["bordures"] = trimesh.Trimesh(vertices=to_gl(np.array(cv)), faces=np.array(cf),
+                                            face_colors=np.tile([150, 148, 144, 255], (len(cf), 1)), process=False)
+    scene = trimesh.Scene()
+    base = trimesh.load(sec.out / "sector.glb")
+    for k, g in base.geometry.items():
+        if isinstance(g.visual, trimesh.visual.texture.TextureVisuals):  # terrain + eau (texturés), sans le bâti extrudé
+            scene.add_geometry(g, node_name=k)
+    for k, g in parts.items():
+        scene.add_geometry(g, node_name=k)
+    scene.export(hq / "viewer.glb")
+    log(f"  vue web : {sum(len(g.faces) for g in parts.values())} triangles → build/hq/viewer.glb")
+
+
 def main(folder: Path):
     sec = Sector(folder)
     (sec.out / "hq").mkdir(exist_ok=True)
@@ -988,6 +1066,8 @@ def main(folder: Path):
     build_ground(sec, mnt)
     progress(0.9, "détails de rue")
     build_details(sec, mnt, fps, water_level)
+    progress(0.95, "vue web")
+    export_viewer(sec)
     info = {"buildings": stats, "trees": n_trees, "water_level_m": water_level}
     (sec.out / "hq" / "hq_manifest.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     progress(1, "terminé")

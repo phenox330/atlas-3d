@@ -95,6 +95,7 @@ function sectorStatus(dir: string) {
   return {
     hq: existsSync(join(b, "hq", "arcachon_hq.blend")),
     facades: existsSync(join(b, "hq", "facades.json")),
+    viewer: existsSync(join(b, "hq", "viewer.glb")) ? statSync(join(b, "hq", "viewer.glb")).mtimeMs : 0,
     renders: existsSync(rd) ? readdirSync(rd).filter(f => f.endsWith(".png")).sort() : [],
     fetched: existsSync(join(raw, "mnt.npy")),
     built: existsSync(join(b, "sector.glb")),
