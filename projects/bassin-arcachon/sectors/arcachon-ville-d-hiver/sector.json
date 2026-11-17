@@ -1,0 +1,11 @@
+{
+  "name": "Arcachon — Ville d'Hiver",
+  "center": [
+    -1.1735,
+    44.6575
+  ],
+  "size_m": 600,
+  "mnt_res_m": 1,
+  "ortho_res_m": 0.2,
+  "water_level_m": 0
+}

@@ -1,0 +1,11 @@
+node_modules/
+pipeline/.venv/
+projects/*/sectors/*/raw/
+projects/*/sectors/*/build/
+projects/*/jobs/
+pipeline/assets/
+unreal/
+
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atlas — villes réelles en 3D</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <aside id="side">
+    <div class="brand"><span class="logo">◭</span> Atlas <small>villes réelles → jeu 3D</small></div>
+    <div class="side-h">Projets <button id="newProject" class="ghost sm" title="Nouveau projet">＋</button></div>
+    <nav id="projects"></nav>
+    <div class="side-h">Machine</div>
+    <div id="env" class="env"></div>
+  </aside>
+
+  <main id="main">
+    <header id="phead">
+      <div>
+        <h1 id="pname">—</h1>
+        <div id="pstats" class="muted"></div>
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-tab="carte" class="on">Carte</button>
+        <button data-tab="secteur">Secteur</button>
+        <button data-tab="workflow">Workflow</button>
+        <button data-tab="agent">Agent Claude</button>
+        <button data-tab="journal">Journal</button>
+      </div>
+    </header>
+
+    <!-- CARTE -->
+    <section id="tab-carte" class="tab on">
+      <div class="carte-wrap">
+        <div id="map"></div>
+        <div class="carte-panel">
+          <h3>Ajouter un secteur</h3>
+          <p class="muted">Clique sur la carte pour placer le centre, ou choisis un lieu prédéfini.</p>
+          <form id="sectorForm">
+            <label>Nom <input name="name" required placeholder="Arcachon — Ville d'Hiver" /></label>
+            <div class="row">
+              <label>Longitude <input name="lon" required /></label>
+              <label>Latitude <input name="lat" required /></label>
+            </div>
+            <label>Taille du carré
+              <select name="size_m">
+                <option value="200">200 m (îlot)</option>
+                <option value="500" selected>500 m (quartier)</option>
+                <option value="1000">1 km</option>
+                <option value="2000">2 km (grand site)</option>
+              </select>
+            </label>
+            <button class="primary">Créer le secteur</button>
+          </form>
+          <h3>Lieux prédéfinis</h3>
+          <div id="presets" class="presets"></div>
+          <h3>Secteurs</h3>
+          <div id="sectorList" class="slist"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTEUR -->
+    <section id="tab-secteur" class="tab">
+      <div id="sectorEmpty" class="empty">Choisis un secteur sur la carte.</div>
+      <div id="sectorView" hidden>
+        <div class="sv-head">
+          <div>
+            <select id="sectorPick"></select>
+            <span id="sectorInfo" class="muted"></span>
+          </div>
+          <div class="pipeline" id="pipeline"></div>
+        </div>
+        <div class="sv-grid">
+          <div class="viewer-card">
+            <div class="vtabs">
+              <button data-v="3d" class="on">Vue 3D</button>
+              <button data-v="blender">Rendus</button>
+              <button data-v="photos">Photos de rue</button>
+              <button data-v="unreal">Unreal</button>
+            </div>
+            <div id="v-3d" class="vpane on"><div id="viewer"></div><div id="viewerHint" class="hint"></div></div>
+            <div id="v-blender" class="vpane"><div id="hqRenders" class="renders"></div><img id="blenderImg" alt="" /><div id="blenderEmpty" class="empty">Lance l'étape Blender.</div></div>
+            <div id="v-photos" class="vpane"><div class="photos-bar"><span id="photoCount" class="muted"></span><button id="savePhotos" class="ghost sm">Enregistrer la sélection</button></div><div id="photos" class="photos"></div></div>
+            <div id="v-unreal" class="vpane"><pre id="unrealDoc" class="doc"></pre></div>
+          </div>
+          <div class="side-card">
+            <h3>Données</h3>
+            <div id="sectorData" class="kv"></div>
+            <h3>Tâche en cours</h3>
+            <div id="sectorJob" class="muted">Aucune.</div>
+            <div class="actions-x">
+              <button id="openFolder" class="ghost sm">Ouvrir le dossier</button>
+              <button id="openBlender" class="ghost sm">Ouvrir dans Blender</button>
+              <button id="delSector" class="danger sm">Supprimer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WORKFLOW -->
+    <section id="tab-workflow" class="tab">
+      <p class="muted intro">Le workflow de Paul Paccini (données IGN/OSM/Panoramax → Blender → Unreal, l'IA pour coder les générateurs et les détails), adapté au Bassin. <b>auto</b> = bouton Atlas · <b>claude</b> = l'agent code l'outil · <b>manuel</b> = toi dans Blender/Unreal.</p>
+      <div id="workflow"></div>
+    </section>
+
+    <!-- AGENT -->
+    <section id="tab-agent" class="tab">
+      <div class="agent">
+        <div class="agent-form">
+          <textarea id="agentPrompt" rows="6" placeholder="Ex. : écris un générateur de villas Ville d'Hiver pour Blender et teste-le sur le secteur courant"></textarea>
+          <div class="row">
+            <label>Secteur <select id="agentSector"><option value="">(aucun)</option></select></label>
+            <label class="check"><input type="checkbox" id="agentResume" /> Continuer la dernière conversation</label>
+            <button id="agentRun" class="primary">Lancer Claude</button>
+          </div>
+          <p class="muted">Claude Code tourne en local dans <code>~/Developer/labs/atlas-3d</code>, en mode bypass : il peut modifier le pipeline et lancer Blender.</p>
+        </div>
+        <pre id="agentLog" class="log"></pre>
+      </div>
+    </section>
+
+    <!-- JOURNAL -->
+    <section id="tab-journal" class="tab">
+      <div class="journal">
+        <div id="jobs" class="jobs"></div>
+        <pre id="jobLog" class="log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dlgProject">
+    <form method="dialog" id="projectForm">
+      <h3>Nouveau projet</h3>
+      <label>Nom <input name="name" required placeholder="Bordeaux" /></label>
+      <label>Lieux prédéfinis
+        <select name="preset"><option value="bassin-arcachon">Bassin d'Arcachon</option><option value="bordeaux">Bordeaux</option><option value="">Aucun</option></select>
+      </label>
+      <div class="row end"><button value="cancel" class="ghost">Annuler</button><button value="ok" class="primary">Créer</button></div>
+    </form>
+  </dialog>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

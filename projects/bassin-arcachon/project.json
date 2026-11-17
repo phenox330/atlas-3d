@@ -1,0 +1,42 @@
+{
+  "name": "Bassin d'Arcachon",
+  "slug": "bassin-arcachon",
+  "preset": "bassin-arcachon",
+  "created": "2026-11-12T23:38:00.000Z",
+  "center": [
+    -1.168,
+    44.6625
+  ],
+  "workflow": {
+    "donnees": {
+      "status": "fait",
+      "notes": "Premier secteur : Jetée Thiers (500 m).",
+      "updated": "2026-11-12T23:25:06.362Z"
+    },
+    "blockout": {
+      "status": "fait",
+      "updated": "2026-11-12T23:25:06.369Z"
+    },
+    "villas": {
+      "status": "en cours",
+      "notes": "V1 13/11 : typologies villa 4 pans / 2 pans / immeuble / annexe / léger, toits tuile ou ardoise, façades procédurales (fenêtres, volets colorés, vitrines). Manque : lambrequins, bow-windows, balcons.",
+      "updated": "2026-11-12T23:25:06.374Z"
+    },
+    "vegetation": {
+      "status": "en cours",
+      "notes": "Arbres réels placés depuis la canopée LiDAR (MNH) : 5 211 sur le centre-ville. Modèles Poly Haven pin + feuillu.",
+      "updated": "2026-11-12T23:25:06.380Z"
+    },
+    "lumiere": {
+      "status": "en cours",
+      "notes": "Coucher de soleil en Blender Cycles (HDRI Poly Haven + soleil aligné). Unreal à faire.",
+      "updated": "2026-11-12T23:25:06.386Z"
+    },
+    "port": {
+      "status": "en cours",
+      "notes": "Jetées Thiers et Legallais (OSM man_made=pier) avec pieux. Port d’Arcachon pas encore dans le secteur.",
+      "updated": "2026-11-12T23:25:06.392Z"
+    }
+  },
+  "claudeSession": "891c6a46-0eb2-477a-8420-45f838a955ba"
+}
