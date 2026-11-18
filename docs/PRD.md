@@ -64,7 +64,7 @@ Rendus avant/après : `build/hq/renders/avant_2026-11-17/` (avant la passe 1), `
 - **Lambrequins** : frise de bois découpé (festons + jours) sous les rives.
 - **Rue** : 675 tirets axiaux, 198 passages piétons, 36 lignes d'arrêt, bordures granit, plaques d'égout. Sol refait (18/11) : chaussée en enrobé avec reprises, trottoirs en enrobé rouge (teinte relevée sur les photos), rues piétonnes pavées de façade à façade, cours en béton clair, jardins détectés sur l'orthophoto. L'orthophoto « sol seul » ne bave plus les toits sur les rues.
 - **Rues habitées** (18/11) : environ 2 100 voitures génériques (stationnement le long des rues, parkings OSM, quelques véhicules en circulation), jardinières et bancs dans les rues piétonnes, ardoises et 660 tables de terrasse devant les commerces, 180 bateaux au mouillage devant les plages.
-- **Alentours** (18/11) : couronne de 3 km en relief (surface LiDAR à 2 m drapée d'orthophoto 0,5 m), contexte 8 km avec orthophoto à 1 m, eau teintée par l'orthophoto (chenaux, hauts-fonds), brume de distance.
+- **Alentours** (18/11) : couronne de 3 km en relief (surface LiDAR à 2 m drapée d'orthophoto 0,5 m), contexte 8 km avec orthophoto à 1 m, abords immédiats (600 m) à 1 m, eau teintée par l'orthophoto (chenaux, hauts-fonds), brume de distance à la teinte du ciel d'horizon.
 - **Mobilier réel OSM** : bancs, poubelles, terrasses devant les restaurants, lampadaires ; 2 500 arbustes placés depuis la végétation basse du LiDAR.
 - **Sable mouillé** sur 1 m au-dessus du niveau de l'eau.
 - **QA LiDAR** : `build/hq/qa_lidar.json` liste les emprises sans écho (15 sur le secteur).

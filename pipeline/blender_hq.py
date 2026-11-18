@@ -712,6 +712,7 @@ def setup_post():
     # la brume voile le paysage, pas le ciel lui-même (le fond a une brume de 1)
     notsky = ng.nodes.new("ShaderNodeMath"); notsky.operation = "LESS_THAN"
     ng.links.new(rl.outputs["Mist"], notsky.inputs[0]); notsky.inputs[1].default_value = 0.9995
+    setup_post.gate = notsky
     gate = ng.nodes.new("ShaderNodeMath"); gate.operation = "MULTIPLY"
     ng.links.new(mul.outputs[0], gate.inputs[0]); ng.links.new(notsky.outputs[0], gate.inputs[1])
     ng.links.new(gate.outputs[0], sock(mix, "Factor_Float"))
@@ -797,7 +798,11 @@ def hdri_sun_dir(path):
     w, h = im.size
     px = np.empty(w * h * 4, np.float32)
     im.pixels.foreach_get(px)
-    lum = px.reshape(h, w, 4)[..., :3].sum(-1)
+    rgb = px.reshape(h, w, 4)[..., :3]
+    lum = rgb.sum(-1)
+    # teinte du ciel juste au-dessus de l'horizon (0,5° à 4°) : c'est la couleur de la brume de distance
+    band = np.minimum(rgb[int(h * 0.503):int(h * 0.522)], 6.0)
+    hdri_sun_dir.horizon = tuple(float(v) for v in band.reshape(-1, 3).mean(0))
     y, x = np.unravel_index(np.argmax(lum), lum.shape)  # y=0 en bas
     # Blender équirect : u = atan2(dy, -dx)/2π + 0.5  ⇒  azimut (depuis +x, sens trigo) = -2π·u
     az = (-(x + 0.5) / w * 2 * math.pi) % (2 * math.pi)
@@ -1212,7 +1217,12 @@ def render_shots(names):
     for nm in names:
         s = SHOTS[nm]
         setup_world(*s["sky"])
-        set_haze(*s.get("haze", ((0.62, 0.70, 0.80), 0.55, 300, 9000)))
+        hz = list(s.get("haze", ((0.62, 0.70, 0.80), 0.55, 300, 9000)))
+        hz[0] = tuple(c * s["sky"][3] for c in hdri_sun_dir.horizon)   # la brume prend la teinte réelle du ciel à l'horizon
+        set_haze(*hz)
+        # à hauteur de rue rien n'est à plus de ~1,5 km : au-delà c'est du ciel ou un bord anticrénelé feuillage/ciel,
+        # qu'il ne faut pas voiler (sinon liseré clair autour des arbres)
+        setup_post.gate.inputs[1].default_value = 0.07 if s["cam"][0] == "street" else 0.9995
         c = s["cam"]
         if c[0] == "street":
             (x, y), (tx, ty), lens = c[1], c[2], c[3]
