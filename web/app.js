@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { HQViewer } from "./viewer3d.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -219,7 +220,7 @@ $(".vtabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   $$(".vtabs button").forEach(x => x.classList.toggle("on", x === b));
   $$(".vpane").forEach(p => p.classList.toggle("on", p.id === `v-${b.dataset.v}`));
-  if (b.dataset.v === "3d") resizeViewer();
+  if (b.dataset.v === "3d") { resizeViewer(); hqv?.resize(); }
 });
 
 // ------------------------------------------------------------ visionneuse 3D
@@ -247,21 +248,43 @@ function initViewer() {
   scene.add(sun, sun.target);
   scene.userData.sun = sun;
   new ResizeObserver(resizeViewer).observe(el);
-  (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+  (function loop() { requestAnimationFrame(loop); if (current) { controls.update(); renderer.render(scene, camera); } })();
 }
 function resizeViewer() {
   const el = $("#viewer"); if (!renderer || !el.clientWidth) return;
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix();
 }
+let hqv = null;
 function loadViewer(s) {
+  const hint = $("#viewerHint"), shots = $("#viewerShots"), hqEl = $("#viewerHQ");
+  shots.innerHTML = "";
+  if (s.status.viewer) {
+    // scène HQ : la même que les rendus Cycles (géométrie exportée de Blender), voir web/viewer3d.js
+    $("#viewer").hidden = true; hqEl.hidden = false;
+    if (current) { scene.remove(current); current = null; }
+    hqv ||= new HQViewer(hqEl, { onStatus: t => { if (t) hint.textContent = t; } });
+    window.hqv = hqv;
+    hqv.active = true;
+    const base = `/files/${state.project}/${s.slug}/build/hq/web/`;
+    hqv.load(base, Math.round(s.status.viewer)).then(() => {
+      const names = Object.keys(hqv.S.shots);
+      shots.innerHTML = names.map(n => `<button data-shot="${n}" class="ghost sm">${esc(n.replaceAll("_", " "))}</button>`).join("")
+        + `<label class="ghost sm"><input type="checkbox" id="aoToggle" checked> ombrage fin</label>`;
+      const mark = n => $$("button", shots).forEach(b => b.classList.toggle("on", b.dataset.shot === n));
+      shots.onclick = e => { const n = e.target.dataset?.shot; if (n) { hqv.setShot(n); mark(n); } };
+      $("#aoToggle").onchange = e => { hqv.ao = e.target.checked; };
+      mark(hqv.shot);
+      hint.textContent = "Même scène que les rendus · clic gauche : tourner · droit : déplacer · molette : zoom · flèches ou ZQSD : avancer (Maj : vite)";
+    }).catch(err => { hint.textContent = "Erreur de chargement : " + err.message; console.error(err); });
+    return;
+  }
+  if (hqv) hqv.active = false;
+  $("#viewer").hidden = false; hqEl.hidden = true;
   if (!renderer) initViewer();
   if (current) { scene.remove(current); current = null; }
-  if (!s.status.built) { $("#viewerHint").textContent = "Pas encore construit : lance « Données » puis « Construire 3D »."; return; }
-  $("#viewerHint").textContent = "Chargement…";
-  // scène HQ (toits LiDAR, façades relevées, arbres) si « Rendu HQ » a tourné, sinon le blockout
-  const url = s.status.viewer ? `/files/${state.project}/${s.slug}/build/hq/viewer.glb?t=${s.status.viewer}`
-                              : `/files/${state.project}/${s.slug}/build/sector.glb?t=${s.manifest.built_at}`;
-  new GLTFLoader().load(url, g => {
+  if (!s.status.built) { hint.textContent = "Pas encore construit : lance « Données » puis « Construire 3D »."; return; }
+  hint.textContent = "Chargement…";
+  new GLTFLoader().load(`/files/${state.project}/${s.slug}/build/sector.glb?t=${s.manifest.built_at}`, g => {
     current = g.scene;
     current.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true;
       if (o.material?.transparent) { o.material.depthWrite = false; o.castShadow = false; } } });
@@ -277,9 +300,8 @@ function loadViewer(s) {
     camera.far = size * 20; camera.updateProjectionMatrix();
     scene.fog.near = size * 1.5; scene.fog.far = size * 8;
     resizeViewer();
-    $("#viewerHint").textContent = (s.status.viewer ? "Scène HQ (aperçu web : murs percés, vitrages, toits relevés ; sans menuiseries, textures ni voitures : voir l'onglet Rendus pour le rendu final) · " : "Blockout · ")
-      + "Clic gauche : tourner · droit : déplacer · molette : zoom";
-  }, undefined, err => { $("#viewerHint").textContent = "Erreur de chargement : " + err.message; });
+    hint.textContent = "Blockout (lance « Rendu HQ » pour la scène détaillée) · clic gauche : tourner · droit : déplacer · molette : zoom";
+  }, undefined, err => { hint.textContent = "Erreur de chargement : " + err.message; });
 }
 function loadBlender(s) {
   const hq = s.status.renders || [];

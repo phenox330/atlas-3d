@@ -1562,89 +1562,101 @@ def build_details(sec: Sector, mnt, footprints, water_level):
 
 # ------------------------------------------------------------------ version web (vue 3D de l'app)
 def export_viewer(sec: Sector):
-    """build/hq/viewer.glb : la scène HQ lisible par le navigateur (three.js). Les matériaux procéduraux
-    de Blender ne passent pas sur le web : on cuit des couleurs par face (enduit relevé sur photo, couleur
-    réelle des toits prise sur l'orthophoto) et des arbres simplifiés. Repère glTF : (x, z, -y)."""
-    import trimesh
+    """build/hq/web/tex/ : textures de la vue 3D de l'app (web/viewer3d.js). La géométrie, elle, est exportée depuis
+    la scène Blender par web_export.py : la vue 3D montre la même scène que les rendus Cycles."""
     hq = sec.out / "hq"
-    d = np.load(hq / "buildings.npz")
-    v, f, mat, col = d["v"], d["f"], d["mat"], d["col"]
-    mats = [str(x) for x in d["mats"]]
-    if "lod" in d.files:  # le web garde l'enveloppe (murs percés, toits, vitrages, portes), pas les menuiseries
-        keep = d["lod"] == 0
-        f, mat, col = f[keep], mat[keep], col[keep]
-    ortho = np.asarray(Image.open(sec.raw / "ortho.jpg").convert("RGB"), np.float32) / 255
-    H, W = ortho.shape[:2]
-    cen = v[f].mean(axis=1)
-    px = np.clip((cen[:, 0] / sec.size * W).astype(int), 0, W - 1)
-    py = np.clip(((1 - cen[:, 1] / sec.size) * H).astype(int), 0, H - 1)
-    fc = np.zeros((len(f), 4), np.float32)
-    fc[:, 3] = 1
-    is_roof = np.isin(mat, [mats.index(m) for m in ("toit_tuile", "toit_ardoise", "toit_plat")])
-    fc[is_roof, :3] = np.clip(ortho[py[is_roof], px[is_roof]] * 1.1, 0, 1)
-    wall = ~is_roof
-    fc[wall, :3] = np.clip(col[wall] * 0.92, 0, 1)
-    fc[mat == mats.index("mur_brique"), :3] = (0.62, 0.32, 0.24)
-    if "vitre" in mats:
-        fc[mat == mats.index("vitre"), :3] = (0.13, 0.17, 0.22)
-    if "lambrequin" in mats:
-        fc[mat == mats.index("lambrequin"), :3] = (0.93, 0.91, 0.86)
-    to_gl = lambda a: np.column_stack([a[:, 0], a[:, 2], -a[:, 1]])
-    # sommets dédoublés par triangle dans le npz : on réindexe et on fusionne (même position, même couleur) pour alléger le glb
-    vf = v[f].reshape(-1, 3)
-    vc = np.repeat((fc * 255).astype(np.uint8), 3, axis=0)
-    bld = trimesh.Trimesh(vertices=to_gl(vf), faces=np.arange(len(vf)).reshape(-1, 3), vertex_colors=vc, process=False)
-    bld.merge_vertices(digits_vertex=3)
-    parts = {"batiments_hq": bld}
-    # arbres simplifiés (pin : fût + cône ; feuillu : fût + boule)
-    trees = json.loads((hq / "trees.json").read_text()) if (hq / "trees.json").exists() else []
-    cone = trimesh.creation.cone(radius=1.0, height=1.0, sections=8)
-    ball = trimesh.creation.icosphere(subdivisions=1, radius=1.0)
-    trunk = trimesh.creation.cylinder(radius=1.0, height=1.0, sections=6)
-    tv, tf, tc = [], [], []
-    n0 = 0
-    for x, y, z, h, sp, _ in trees:
-        pieces = []
-        t = trunk.copy(); t.apply_scale([0.25, 0.25, h * 0.55]); t.apply_translation([x, y, z + h * 0.275]); pieces.append((t, (0.30, 0.22, 0.16)))
-        if sp == "pine":
-            c = ball.copy(); c.apply_scale([h * 0.28, h * 0.28, h * 0.16]); c.apply_translation([x, y, z + h * 0.82]); pieces.append((c, (0.16, 0.26, 0.14)))
-        else:
-            c = ball.copy(); c.apply_scale([h * 0.33, h * 0.33, h * 0.30]); c.apply_translation([x, y, z + h * 0.62]); pieces.append((c, (0.22, 0.34, 0.16)))
-        for m, cc in pieces:
-            tv.append(m.vertices); tf.append(m.faces + n0); tc.append(np.tile([*cc, 1.0], (len(m.faces), 1)))
-            n0 += len(m.vertices)
-    if tv:
-        tm = trimesh.Trimesh(vertices=to_gl(np.vstack(tv)), faces=np.vstack(tf),
-                             face_colors=(np.vstack(tc) * 255).astype(np.uint8), process=False)
-        parts["arbres"] = tm
-    # bordures
-    curbs = json.loads((hq / "curbs.json").read_text()) if (hq / "curbs.json").exists() else []
-    cv, cf = [], []
-    for line in curbs:
-        P = np.array(line, np.float32)
-        for i in range(len(P) - 1):
-            a, b = P[i], P[i + 1]
-            dxy = b[:2] - a[:2]
-            L = float(np.linalg.norm(dxy))
-            if L < 0.05:
-                continue
-            nrm = np.array([-dxy[1], dxy[0]]) / L * 0.12
-            k = len(cv)
-            cv += [[a[0] - nrm[0], a[1] - nrm[1], a[2] + 0.14], [a[0] + nrm[0], a[1] + nrm[1], a[2] + 0.14],
-                   [b[0] + nrm[0], b[1] + nrm[1], b[2] + 0.14], [b[0] - nrm[0], b[1] - nrm[1], b[2] + 0.14]]
-            cf += [[k, k + 1, k + 2], [k, k + 2, k + 3]]
-    if cv:
-        parts["bordures"] = trimesh.Trimesh(vertices=to_gl(np.array(cv)), faces=np.array(cf),
-                                            face_colors=np.tile([150, 148, 144, 255], (len(cf), 1)), process=False)
-    scene = trimesh.Scene()
-    base = trimesh.load(sec.out / "sector.glb")
-    for k, g in base.geometry.items():
-        if isinstance(g.visual, trimesh.visual.texture.TextureVisuals):  # terrain + eau (texturés), sans le bâti extrudé
-            scene.add_geometry(g, node_name=k)
-    for k, g in parts.items():
-        scene.add_geometry(g, node_name=k)
-    scene.export(hq / "viewer.glb", include_normals=False)
-    log(f"  vue web : {sum(len(g.faces) for g in parts.values())} triangles → build/hq/viewer.glb")
+    tex = hq / "web" / "tex"
+    tex.mkdir(parents=True, exist_ok=True)
+    Image.MAX_IMAGE_PIXELS = None
+
+    def put(src: Path, name: str, size: int | None = None, gray=False):
+        if not src.exists():
+            return
+        dst = tex / name
+        if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+            return
+        im = Image.open(src)
+        im = im.convert("L" if gray else ("RGB" if im.mode != "RGBA" else "RGBA"))
+        if size and max(im.size) > size:
+            im = im.resize((size, size), Image.LANCZOS)
+        im.save(dst, quality=90) if name.endswith(".jpg") else im.save(dst)
+
+    put(sec.raw / "ortho.jpg", "ortho.jpg", 4096)
+    put(hq / "ground_ortho.jpg", "ground_ortho.jpg")
+    put(hq / "ground_mask_a.png", "ground_mask_a.png")
+    put(hq / "ground_mask_b.png", "ground_mask_b.png")
+    put(sec.raw / "near_ortho.jpg", "near_ortho.jpg")
+    put(sec.raw / "mid_ortho.jpg", "mid_ortho.jpg", 4096)
+    put(sec.raw / ("ctx_ortho_1m.jpg" if (sec.raw / "ctx_ortho_1m.jpg").exists() else "ctx_ortho.jpg"), "ctx_ortho.jpg", 4096)
+    assets = Path(__file__).resolve().parent / "assets" / "textures"
+    for name in ("asphalt_02", "gravel_concrete", "patterned_paving", "coast_sand_01", "leafy_grass", "painted_plaster_wall",
+                 "brick_4", "grey_plaster", "clay_roof_tiles_02", "roof_slates_02"):
+        for k in ("diff", "nor", "rough"):
+            src = next(iter((assets / name).glob(f"{k}.*")), None)
+            if src:
+                put(src, f"{name}_{k}.jpg", 1024, gray=k == "rough")
+
+    # bruit périodique (4 échelles dans R, V, B, A) pour les variations de matière, et normales du clapot
+    def periodic(n, beta, seed):
+        r = np.random.default_rng(seed)
+        fx = np.fft.fftfreq(n)[:, None]; fy = np.fft.fftfreq(n)[None, :]
+        k = np.sqrt(fx ** 2 + fy ** 2); k[0, 0] = 1
+        spec = (r.normal(size=(n, n)) + 1j * r.normal(size=(n, n))) / k ** beta
+        spec[0, 0] = 0
+        h = np.real(np.fft.ifft2(spec))
+        lo, hi = np.percentile(h, (1, 99))
+        return np.clip((h - lo) / (hi - lo), 0, 1)
+
+    if not (tex / "noise.png").exists():
+        n = 512
+        px = np.dstack([periodic(n, b, i) for i, b in enumerate((1.8, 1.4, 1.0, 2.2))])
+        Image.fromarray((px * 255).astype(np.uint8), "RGBA").save(tex / "noise.png")
+    if not (tex / "water_n.png").exists():
+        n = 512
+        h = periodic(n, 1.5, 7) * 0.7 + periodic(n, 0.9, 8) * 0.3
+        dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 6.0
+        dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 6.0
+        nz = 1 / np.sqrt(dx * dx + dy * dy + 1)
+        nrm = np.dstack([-dx * nz, -dy * nz, nz]) * 0.5 + 0.5
+        Image.fromarray((nrm * 255).astype(np.uint8), "RGB").save(tex / "water_n.png")
+    # part de ciel visible depuis le sol (rues encaissées plus sombres) : remplace l'éclairage global de Cycles pour la
+    # lumière ambiante. R = part de ciel au sol, V = altitude du sol, B = hauteur du bâti/des arbres au-dessus du sol.
+    mnt_p, mnh_p = sec.raw / "mnt.npy", sec.raw / "mnh.npy"
+    if mnt_p.exists() and mnh_p.exists() and not (tex / "skyocc.png").exists():
+        g = np.load(mnt_p).astype(np.float32)
+        hh = np.load(mnh_p).astype(np.float32)
+        f = hh.shape[0] // g.shape[0]
+        if f > 1:
+            hh = hh[:g.shape[0] * f, :g.shape[1] * f].reshape(g.shape[0], f, g.shape[1], f).max(axis=(1, 3))
+        hh = np.clip(hh, 0, 60)
+        hh[hh < 1.0] = 0
+        res = sec.size / g.shape[0]
+        surf = g + hh
+        svf = np.zeros_like(g)
+        ndir = 16
+        for k in range(ndir):
+            a = 2 * math.pi * k / ndir
+            dx, dy = math.cos(a), math.sin(a)
+            tmax = np.zeros_like(g)
+            for d in (1, 2, 3, 4, 6, 8, 11, 14, 18, 23, 29, 36, 45):
+                sh = ndimage.shift(surf, (dy * d / res, -dx * d / res), order=0, mode="nearest")   # ligne 0 = nord
+                tmax = np.maximum(tmax, (sh - g) / d)
+            svf += 1.0 / (1.0 + tmax * tmax)          # cos² de l'angle d'horizon
+        svf /= ndir
+        inside = hh > 2.5                               # sous un toit : on reprend la valeur de la rue la plus proche
+        if inside.any() and (~inside).any():
+            idx = ndimage.distance_transform_edt(inside, return_distances=False, return_indices=True)
+            svf = svf[idx[0], idx[1]]
+        top = ndimage.maximum_filter(hh, size=int(round(7 / res)) | 1)
+        zmin, zrng = float(g.min()), float(max(g.max() - g.min(), 1.0))
+        px = np.dstack([np.clip(svf, 0, 1), np.clip((g - zmin) / zrng, 0, 1), np.clip(top / 60.0, 0, 1)])
+        Image.fromarray((px * 255 + 0.5).astype(np.uint8), "RGB").save(tex / "skyocc.png")
+        (tex / "skyocc.json").write_text(json.dumps({"zmin": zmin, "zrange": zrng, "hmax": 60.0}))
+        log(f"  vue 3D : part de ciel visible (moyenne {svf.mean():.2f})")
+    old = hq / "viewer.glb"
+    if old.exists():
+        old.unlink()
+    log(f"  vue 3D : textures prêtes dans {tex.relative_to(sec.out)}")
 
 
 def main(folder: Path):

@@ -76,7 +76,7 @@ Rendus avant/après : `build/hq/renders/avant_2026-11-17/` (avant la passe 1), `
 - **Aucun piéton.**
 - **Façades vraisemblables, pas exactes** : la vision donne étages, couleurs, volets et matériaux sur 239 bâtiments ; la position de chaque baie reste une trame régulière.
 - **Unreal en retard** : il n'a aucune des nouveautés du 18/11 (baies en relief, toits en pans, voitures, enseignes, nouveau sol). Parité à refaire.
-- **Vue 3D web** : aperçu allégé (murs percés, vitrages, toits), sans menuiseries, textures ni voitures.
+- **Vue 3D web** (18/11) : même scène que les rendus Cycles, exportée de Blender (`web_export.py` → `web/viewer3d.js`) : façades détaillées, matières, voitures, mobilier, arbres, alentours, mêmes points de vue et même ciel. Limites du temps réel : pas de lumière rebondie calculée (remplacée par une carte de part de ciel visible), arbres en panneaux à vues multiples (flous de très près), reflets des vitrages limités au ciel.
 - Toits : lucarnes et petits volumes parfois fondus dans le pan voisin ; un arbre au-dessus d'un toit peut encore le fausser (nuage LiDAR classé non branché, le service WFS IGN utilisé ne l'expose pas).
 - Couronne de 3 km : relief LiDAR drapé de photo aérienne, convaincant de loin, mou de près.
 - Arbres d'alignement : modèles Poly Haven génériques (pas de platane ni de pin maritime fidèle).

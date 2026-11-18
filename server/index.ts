@@ -95,7 +95,7 @@ function sectorStatus(dir: string) {
   return {
     hq: existsSync(join(b, "hq", "arcachon_hq.blend")),
     facades: existsSync(join(b, "hq", "facades.json")),
-    viewer: existsSync(join(b, "hq", "viewer.glb")) ? statSync(join(b, "hq", "viewer.glb")).mtimeMs : 0,
+    viewer: existsSync(join(b, "hq", "web", "scene.json")) ? statSync(join(b, "hq", "web", "scene.json")).mtimeMs : 0,
     renders: existsSync(rd) ? readdirSync(rd).filter(f => f.endsWith(".png")).sort() : [],
     fetched: existsSync(join(raw, "mnt.npy")),
     built: existsSync(join(b, "sector.glb")),
@@ -392,7 +392,7 @@ app.post("/api/jobs/:id/cancel", c => {
 });
 
 // fichiers d'un secteur (glb, png, json)
-const MIME: Record<string, string> = { ".glb": "model/gltf-binary", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".py": "text/plain; charset=utf-8" };
+const MIME: Record<string, string> = { ".glb": "model/gltf-binary", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".hdr": "application/octet-stream", ".f32": "application/octet-stream", ".py": "text/plain; charset=utf-8" };
 app.get("/files/:p/:s/*", c => {
   const { p, s } = c.req.param();
   if (!safe(p) || !safe(s)) return c.notFound();
@@ -405,6 +405,8 @@ app.get("/files/:p/:s/*", c => {
 
 app.use("/vendor/three/*", serveStatic({ root: "./node_modules/three", rewriteRequestPath: p => p.replace("/vendor/three", "") }));
 app.use("/vendor/leaflet/*", serveStatic({ root: "./node_modules/leaflet/dist", rewriteRequestPath: p => p.replace("/vendor/leaflet", "") }));
+// l'interface n'est jamais mise en cache : une mise à jour du code est visible au rechargement
+app.use("/*", async (c, next) => { await next(); if (!c.req.path.startsWith("/vendor/") && !c.req.path.startsWith("/files/") && !c.req.path.startsWith("/api/")) c.header("cache-control", "no-cache"); });
 app.use("/*", serveStatic({ root: "./web" }));
 app.get("*", serveStatic({ path: "./web/index.html" }));
 

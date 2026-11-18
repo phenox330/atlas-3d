@@ -11,10 +11,16 @@ données ouvertes (IGN LiDAR HD, BD TOPO, ortho, OSM, Panoramax) → Blender →
   Façades : `facades.py` (photos Panoramax → rayons vers les bâtiments → Claude vision via `claude -p` → build/hq/facades.json, cache raw/facades/).
   Haute qualité : `hq_prepare.py` (toits en facettes planes : pans LiDAR par plan tangent local → polygones simplifiés en couverture,
   murs jusqu'aux pans, repli procédural si pas d'écho → qa_lidar.json ; façades photo > BD TOPO > hasard ; sol : masques a/b + ground_ortho ;
-  arbres et arbustes LiDAR, mobilier OSM, cars.json, boats.json, signs.json ; couronne 3 km mid_mns/mid_ortho ; viewer.glb)
+  arbres et arbustes LiDAR, mobilier OSM, cars.json, boats.json, signs.json ; couronne 3 km mid_mns/mid_ortho ; textures web/tex)
   + `facade_geo.py` (baies percées, menuiseries, volets, portes, vitrines, enseignes, balcons, débords ; `lod` 0 enveloppe / 1 détail ;
   matériaux par attribut de face « tint » : vitre, peint, volet, garde_corps, toile) + `cars.py` (voitures et bateaux générés dans Blender)
   → `blender_hq.py` (scène Cycles + 8 plans dans SHOTS, AgX, brume au compositing, options --samples --res --shots --view --look --exposure --out --nosave)
+  → `web_export.py` (appelé par blender_hq après la construction : scène Blender → build/hq/web/ pour la vue 3D de l'app ;
+  champs de hauteur .f32, batiments.glb par matériau, voitures et mobilier instanciés, arbres en atlas de vues rendus par Cycles,
+  scene.json avec les mêmes plans/ciel/soleil que SHOTS ; `glbw.py` = écriture glb sans dépendance)
+  → `web/viewer3d.js` (three.js : mêmes matières que blender_hq portées en GLSL, HDRI + soleil + carte d'ombre recentrée, GTAO,
+  part de ciel visible tex/skyocc.png à la place de l'éclairage global, AgX, profondeur inversée). Toute matière ou plan modifié
+  dans blender_hq.py doit l'être aussi dans viewer3d.js : la vue 3D doit rester la même scène que les rendus.
   → `export_ue.py` (Blender → glb monde + pieux fusionnés + teinte/graine en COLOR_0, instances.json)
   → `ue_project.py` (projet Unreal 5.8 depuis `pipeline/unreal_template/` : atlas_build, atlas_materials, atlas_render)
   → `ue_render.sh` (Movie Render Queue/Lumen, éditeur masqué → build/hq/renders/unreal_*.png). Testé 13/11 sur UE 5.8.4.

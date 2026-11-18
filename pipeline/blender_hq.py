@@ -1257,6 +1257,11 @@ if __name__ == "__main__":
     if not OPT.get("nosave"):
         bpy.ops.wm.save_as_mainfile(filepath=str(HQ / "arcachon_hq.blend"))
         log("Scène sauvegardée")
+        if not OPT.get("noweb"):
+            # la vue 3D de l'app affiche cette même scène : on l'exporte à chaque construction
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import web_export
+            web_export.run(sys.modules[__name__], OPT)
     if not OPT.get("no-render"):
         shots = str(OPT.get("shots", ",".join(SHOTS))).split(",")
         render_shots(shots)
