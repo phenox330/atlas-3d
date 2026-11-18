@@ -1,6 +1,6 @@
 # Atlas — PRD
 
-> Document vivant. Dernière mise à jour : 17/11/2026 (passe « réalisme » sur arcachon-centre-ville).
+> Document vivant. Dernière mise à jour : 18/11/2026 (deuxième passe « réalisme » sur arcachon-centre-ville : façades en relief, toits en pans, rues habitées, alentours).
 > Sources : `CLAUDE.md` (architecture), `server/workflow.ts` (étapes détaillées et prompts),
 > `docs/recherche/` (état de l'art), `docs/ressources/` (retours d'expérience externes).
 
@@ -48,33 +48,39 @@ commun aux trois options : données → bâti → rendu.
 - Génération de la ville par un *world model* (voir `docs/recherche/`).
 - Moteur maison (Rust, etc.) : Unreal reste la cible tant que la scène grossit (voir 7).
 
-## 5. État au 17/11/2026
+## 5. État au 18/11/2026
 
 Priorité actuelle : **rendre le secteur `arcachon-centre-ville` réaliste avant d'étendre la zone.**
-Rendus avant/après : `build/hq/renders/avant_2026-11-17/` contre `build/hq/renders/` (hors git).
+Rendus avant/après : `build/hq/renders/avant_2026-11-17/` (avant la passe 1), `avant_2026-11-18/` (avant la passe 2), contre `build/hq/renders/` (hors git).
 
 ### 5.1 Ce qui marche
 - **3 secteurs** : `jetee-thiers` (500 m), `arcachon-centre-ville` (1 km²), `arcachon-ville-d-hiver`.
 - **Données** : MNT et MNH LiDAR HD, ortho 20 cm, BD TOPO, OSM (avec passages piétons, feux, stops, panneaux, bornes), Panoramax découpé en 4×4 cellules (2 428 photos au lieu de 500).
-- **Toits relevés au LiDAR** (17/11) : la surface LiDAR est triangulée dans chaque emprise, découpée en pans plans (RANSAC), bornée entre égout et faîtage. Les murs montent jusqu'aux pans. Les terrasses sont détectées et posées à plat avec acrotère. Résultat sur le secteur : 1 546 bâtiments, dont 563 en toit plat.
+- **Toits en pans** (18/11) : les points LiDAR de chaque emprise sont regroupés en pans plans (plan tangent local + orientation, pour ne pas confondre une pente avec une tranche horizontale). Chaque pan devient un polygone aux bords droits, les décrochés entre pans deviennent des murs, et le haut des murs extérieurs suit exactement les pans. Débords de toit, gouttières, descentes d'eau, souches de cheminée, couvertines d'acrotère. 1 546 bâtiments, dont 581 en toit plat.
+- **Façades en relief** (18/11, `facade_geo.py`) : les baies sont percées dans les murs (tableaux, vitrage réfléchissant avec voilages, menuiseries), avec appuis, encadrements brique ou peints, volets battants ouverts ou clos, volets roulants, portes, vitrines avec enseigne et store, balcons filants ou individuels, bandeaux d'étage, soubassement. Pas de baies sur les murs mitoyens. Enduits vieillis (coulures, salissures sous l'égout).
+- **Commerces réels** (18/11) : rez-de-chaussée commercial là où OSM place un commerce (195 points) ou le long des rues piétonnes ; 868 enseignes à noms fictifs.
 - **Couleur réelle des toits** (17/11) : l'orthophoto vue d'avion × le grain des tuiles et ardoises.
 - **Façades lues sur photo** (17/11, `facades.py`) : 239 bâtiments décrits par vision sur 250 photos. Pour chacun : couleur d'enduit, étages, volets (battants, roulants, aucun) et leur couleur, chaînages brique, lambrequins, vitrine au RDC. Sans photo, on se rabat sur la BD TOPO (matériaux des murs et du toit, nombre d'étages), puis sur le hasard.
-- **Shader de façade** : hauteur d'étage réelle, volets roulants, harpes et encadrements en brique, vitrines connues.
 - **Lambrequins** : frise de bois découpé (festons + jours) sous les rives.
-- **Rue** : 675 tirets axiaux, 198 passages piétons, 36 lignes d'arrêt, bordures granit, trottoir continu jusqu'aux façades (couleur relevée sur les photos), plaques d'égout.
+- **Rue** : 675 tirets axiaux, 198 passages piétons, 36 lignes d'arrêt, bordures granit, plaques d'égout. Sol refait (18/11) : chaussée en enrobé avec reprises, trottoirs en enrobé rouge (teinte relevée sur les photos), rues piétonnes pavées de façade à façade, cours en béton clair, jardins détectés sur l'orthophoto. L'orthophoto « sol seul » ne bave plus les toits sur les rues.
+- **Rues habitées** (18/11) : environ 2 100 voitures génériques (stationnement le long des rues, parkings OSM, quelques véhicules en circulation), jardinières et bancs dans les rues piétonnes, ardoises et 660 tables de terrasse devant les commerces, 180 bateaux au mouillage devant les plages.
+- **Alentours** (18/11) : couronne de 3 km en relief (surface LiDAR à 2 m drapée d'orthophoto 0,5 m), contexte 8 km avec orthophoto à 1 m, eau teintée par l'orthophoto (chenaux, hauts-fonds), brume de distance.
 - **Mobilier réel OSM** : bancs, poubelles, terrasses devant les restaurants, lampadaires ; 2 500 arbustes placés depuis la végétation basse du LiDAR.
 - **Sable mouillé** sur 1 m au-dessus du niveau de l'eau.
 - **QA LiDAR** : `build/hq/qa_lidar.json` liste les emprises sans écho (15 sur le secteur).
-- **Rendus** : Blender Cycles (5 plans) et Unreal 5.8.4 (Lumen).
+- **Rendus** : Blender Cycles (8 plans, dont 3 à hauteur d'homme, rendu colorimétrique AgX, ciel de jour) et Unreal 5.8.4 (Lumen, état du 13/11).
 
 ### 5.2 Limites connues
-- **Unreal pas encore à parité** : il reçoit la nouvelle géométrie (toits relevés, bordures), mais pas encore les données de façade (volets, chaînages), les lambrequins, ni la couleur orthophoto des toits.
-- Sur certains pans raides, l'orthophoto « coule » (façades vues en biais sur la photo d'avion).
-- Fenêtres encore en grille régulière : la vision compte les étages, pas encore la position de chaque baie. Pas de balcons en relief.
-- Pas de véhicules ni de pinasses : aucun modèle CC0 fidèle (le « ship_pinnace » de Poly Haven est un galion). Il faut passer par l'image→3D (jalon C).
-- Arbres d'alignement : modèle Poly Haven générique (pas de platane ni de pin maritime fidèle).
-- Bathymétrie absente : plan d'eau plat.
-- Nuage de points LiDAR classé (sol / bâtiment / végétation) non branché : le service WFS IGN utilisé ne l'expose pas. On travaille sur le MNH, donc un arbre au-dessus d'un toit peut le bosseler.
+- **Pas encore photoréaliste à hauteur d'homme.** Les vues aériennes passent pour des photos au premier coup d'œil ; les vues de rue restent au niveau d'une image de synthèse soignée. Ce qui manque : des piétons, des voitures fidèles, la vraie composition de chaque façade.
+- **Voitures génériques** : gabarits générés par le code, corrects à plus de 20 m et vus d'avion, pas en gros plan (écartées à moins de 20 m de la caméra dans les plans de rue). Des modèles fidèles demandent une bibliothèque d'assets ou de l'image→3D (jalon C).
+- **Aucun piéton.**
+- **Façades vraisemblables, pas exactes** : la vision donne étages, couleurs, volets et matériaux sur 239 bâtiments ; la position de chaque baie reste une trame régulière.
+- **Unreal en retard** : il n'a aucune des nouveautés du 18/11 (baies en relief, toits en pans, voitures, enseignes, nouveau sol). Parité à refaire.
+- **Vue 3D web** : aperçu allégé (murs percés, vitrages, toits), sans menuiseries, textures ni voitures.
+- Toits : lucarnes et petits volumes parfois fondus dans le pan voisin ; un arbre au-dessus d'un toit peut encore le fausser (nuage LiDAR classé non branché, le service WFS IGN utilisé ne l'expose pas).
+- Couronne de 3 km : relief LiDAR drapé de photo aérienne, convaincant de loin, mou de près.
+- Arbres d'alignement : modèles Poly Haven génériques (pas de platane ni de pin maritime fidèle).
+- Bathymétrie absente : plan d'eau plat, estran noyé au niveau `water_level_m`.
 - Pas encore de personnage jouable : l'échelle à hauteur d'homme n'est pas validée.
 
 ### 5.3 Niveaux de détail et budget
@@ -95,15 +101,16 @@ Les étapes détaillées, avec leurs prompts, sont dans `server/workflow.ts`. Or
 - [x] Données, blockout, rendu Blender, rendu Unreal
 - [x] Passe QA LiDAR : emprises sans écho détectées et renvoyées au procédural (`qa_lidar.json`)
 - [x] Marquages, passages piétons, bordures, trottoirs continus
-- [ ] **Parité Unreal** : données de façade (UV2/UV3), lambrequins, couleur orthophoto des toits
+- [ ] **Parité Unreal** : baies en relief, toits en pans, nouveaux matériaux (vitrage, peint, volet), voitures, enseignes, sol
 - [ ] **Valider l'échelle** : un Third Person Character qui marche dans `arcachon-centre-ville`
 
 ### Jalon B : Le Bassin crédible
 - [ ] Bathymétrie (SHOM, licence à vérifier) + estran LiDAR + niveau de marée paramétrable
-- [x] Toits relevés depuis la surface LiDAR (pans plans RANSAC) + couleur orthophoto
+- [x] Toits en pans plans aux bords droits (LiDAR) + couleur orthophoto + débords, gouttières, cheminées
 - [ ] Nuage de points LiDAR HD **classé** pour retirer les arbres au-dessus des toits
 - [x] Façades lues sur les photos Panoramax (vision), avec repli BD TOPO
-- [ ] Façades V2 : position réelle des baies, balcons en relief, bow-windows
+- [x] Façades en relief : baies percées, volets, portes, vitrines, balcons, enseignes (18/11)
+- [ ] Façades V3 : position réelle de chaque baie lue sur photo, bow-windows, lucarnes
 - [ ] Étendre la lecture des façades aux bâtiments sans photo proche (photos HD, angles latéraux)
 - [ ] Vrais pins maritimes, oyats, dunes
 - [ ] Port d'Arcachon, pinasses à quai
@@ -113,7 +120,8 @@ Les étapes détaillées, avec leurs prompts, sont dans `server/workflow.ts`. Or
 - [ ] Pipeline image→3D multi-vues + nettoyage Blender (textures avec texte régénérées à part)
 
 ### Jalon D : Vie et détails
-- [ ] Mobilier urbain placé depuis des données ouvertes (OSM, bases de signalisation si dispo)
+- [x] Mobilier urbain et commerces placés depuis OSM ; voitures génériques en stationnement (18/11)
+- [ ] Voitures fidèles et piétons (bibliothèque d'assets ou image→3D)
 - [ ] Détails « Pareto » : sable mouillé, traces dans le sable, sillage des bateaux, reflets au coucher du soleil
 - [ ] PNJ : bateaux qui naviguent, passants, vélos (une IA de comportement simple par type)
 

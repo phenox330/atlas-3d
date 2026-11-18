@@ -7,8 +7,11 @@ Chaque script imprime `@@PROGRESS <0..1> <étape>` pour la barre de progression.
 |---|---|
 | `atlas.py fetch\|build\|all <secteur>` | Téléchargement (MNT LiDAR HD, ortho, BD TOPO, OSM via Overpass avec 3 miroirs) et blockout |
 | `blender_sector.py` | Scène Blender du blockout |
-| `hq_prepare.py` | Haute qualité : toits 2 et 4 pans, façades, arbres depuis le MNH LiDAR, masques de sol OSM, jetées, mobilier |
-| `blender_hq.py` | Scène Cycles et rendu des plans (`--samples --res --shots --view --exposure`) |
+| `facades.py` | Photos Panoramax → vision (`claude -p`) → attributs de façade par bâtiment (`build/hq/facades.json`) |
+| `hq_prepare.py` | Haute qualité : toits en pans (LiDAR), façades en relief, arbres depuis le MNH, masques de sol, mobilier, voitures, bateaux, alentours (couronne 3 km), vue web |
+| `facade_geo.py` | Géométrie des façades : baies percées, menuiseries, volets, portes, vitrines, enseignes, balcons, débords de toit, gouttières |
+| `cars.py` | Voitures génériques (5 gabarits) et bateaux au mouillage, générés dans Blender |
+| `blender_hq.py` | Scène Cycles et rendu des 8 plans (`--samples --res --shots --view --look --exposure --out --nosave --nocars`) |
 | `polyhaven.py` | Téléchargement des assets CC0 dans `assets/` (hors git) |
 | `export_ue.py` | Blender → glb monde + pieux fusionnés + `instances.json` |
 | `ue_project.py` | Génère le projet Unreal 5.8 depuis `unreal_template/` |

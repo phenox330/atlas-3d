@@ -9,10 +9,12 @@ données ouvertes (IGN LiDAR HD, BD TOPO, ortho, OSM, Panoramax) → Blender →
 - `web/` : interface (vanilla JS, Leaflet, three.js servis depuis node_modules).
 - `pipeline/` : projet uv (Python 3.14). `atlas.py fetch|build|all <secteur>`, `blender_sector.py`, `unreal_export.py`.
   Façades : `facades.py` (photos Panoramax → rayons vers les bâtiments → Claude vision via `claude -p` → build/hq/facades.json, cache raw/facades/).
-  Haute qualité : `hq_prepare.py` (toits relevés sur la surface LiDAR + pans RANSAC, repli procédural si pas d'écho → qa_lidar.json ;
-  façades photo > BD TOPO > hasard, vecteur `fa` par face ; arbres LiDAR MNH, arbustes LiDAR ; marquages, passages piétons,
-  bordures, mobilier réel OSM ; masques de sol)
-  → `blender_hq.py` (scène Cycles + 5 plans dans SHOTS, options --samples --res --shots --view --exposure)
+  Haute qualité : `hq_prepare.py` (toits en facettes planes : pans LiDAR par plan tangent local → polygones simplifiés en couverture,
+  murs jusqu'aux pans, repli procédural si pas d'écho → qa_lidar.json ; façades photo > BD TOPO > hasard ; sol : masques a/b + ground_ortho ;
+  arbres et arbustes LiDAR, mobilier OSM, cars.json, boats.json, signs.json ; couronne 3 km mid_mns/mid_ortho ; viewer.glb)
+  + `facade_geo.py` (baies percées, menuiseries, volets, portes, vitrines, enseignes, balcons, débords ; `lod` 0 enveloppe / 1 détail ;
+  matériaux par attribut de face « tint » : vitre, peint, volet, garde_corps, toile) + `cars.py` (voitures et bateaux générés dans Blender)
+  → `blender_hq.py` (scène Cycles + 8 plans dans SHOTS, AgX, brume au compositing, options --samples --res --shots --view --look --exposure --out --nosave)
   → `export_ue.py` (Blender → glb monde + pieux fusionnés + teinte/graine en COLOR_0, instances.json)
   → `ue_project.py` (projet Unreal 5.8 depuis `pipeline/unreal_template/` : atlas_build, atlas_materials, atlas_render)
   → `ue_render.sh` (Movie Render Queue/Lumen, éditeur masqué → build/hq/renders/unreal_*.png). Testé 13/11 sur UE 5.8.4.

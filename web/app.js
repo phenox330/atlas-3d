@@ -277,7 +277,7 @@ function loadViewer(s) {
     camera.far = size * 20; camera.updateProjectionMatrix();
     scene.fog.near = size * 1.5; scene.fog.far = size * 8;
     resizeViewer();
-    $("#viewerHint").textContent = (s.status.viewer ? "Scène HQ (aperçu web, sans fenêtres ni textures fines : voir l'onglet Rendus pour le rendu final) · " : "Blockout · ")
+    $("#viewerHint").textContent = (s.status.viewer ? "Scène HQ (aperçu web : murs percés, vitrages, toits relevés ; sans menuiseries, textures ni voitures : voir l'onglet Rendus pour le rendu final) · " : "Blockout · ")
       + "Clic gauche : tourner · droit : déplacer · molette : zoom";
   }, undefined, err => { $("#viewerHint").textContent = "Erreur de chargement : " + err.message; });
 }
